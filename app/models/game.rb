@@ -1,4 +1,6 @@
+# frozen_string_literal: true
+
 class Game < ApplicationRecord
-  WEB_URL = "https://boardgamegeek.com/boardgame/".freeze
-  API_URL = "https://boardgamegeek.com/xmlapi/boardgame/".freeze
+  WEB_URL = "https://boardgamegeek.com/boardgame/"
+  API_URL = "https://boardgamegeek.com/xmlapi/boardgame/"
 end
