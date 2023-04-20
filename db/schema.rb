@@ -17,6 +17,7 @@ ActiveRecord::Schema[7.0].define(version: 2023_04_01_223914) do
   create_table "games", force: :cascade do |t|
     t.string "name"
     t.string "bgg_id"
+    t.string "yearpublished"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
   end
