@@ -2,5 +2,5 @@
 
 class Game < ApplicationRecord
   WEB_URL = "https://boardgamegeek.com/boardgame/"
-  API_URL = "https://boardgamegeek.com/xmlapi/boardgame/"
+  API_URL = "https://boardgamegeek.com/xmlapi2/"
 end
