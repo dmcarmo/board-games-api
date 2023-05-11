@@ -1,23 +1,43 @@
 # frozen_string_literal: true
 
-class Api::BaseController < ActionController::API
-  # include Pundit
+module Api
+  class BaseController < ApplicationController
+    include ActionController::HttpAuthentication::Basic::ControllerMethods
+    include ActionController::HttpAuthentication::Token::ControllerMethods
+    include Pundit::Authorization
 
-  # after_action :verify_authorized, except: :index
-  # after_action :verify_policy_scoped, only: :index
+    rescue_from Pundit::NotAuthorizedError, with: :not_authorized
 
-  # rescue_from Pundit::NotAuthorizedError,   with: :user_not_authorized
-  rescue_from ActiveRecord::RecordNotFound, with: :not_found
+    before_action :authenticate_with_api_key, except: :create
 
-  private
+    attr_reader :current_bearer, :current_api_key
 
-  def user_not_authorized(exception)
-    render json: {
-      error: "Unauthorized #{exception.policy.class.to_s.underscore.camelize}.#{exception.query}"
-    }, status: :unauthorized
-  end
+    def pundit_user
+      current_api_key
+    end
 
-  def not_found(exception)
-    render json: { error: exception.message }, status: :not_found
+    protected
+
+    def not_authorized
+      render status: :unauthorized, json: {
+        errors: ["You are not authorized to perform this action"]
+      }
+    end
+
+    def authenticate_with_api_key
+      authenticate_or_request_with_http_token do |token, options|
+        @current_api_key = ApiKey.where(revoked_at: nil).find_by_token(token)
+        @current_bearer = current_api_key&.bearer
+      end
+    end
+
+    # Override rails default 401 response to return JSON content-type
+    # with request for Bearer token
+    # https://api.rubyonrails.org/classes/ActionController/HttpAuthentication/Token/ControllerMethods.html
+    def request_http_token_authentication(realm = "Application", message = nil)
+      json_response = { errors: [message || "Access denied"] }
+      headers["WWW-Authenticate"] = %(Bearer realm="#{realm.tr('"', "")}")
+      render json: json_response, status: :unauthorized
+    end
   end
 end

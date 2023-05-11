@@ -10,10 +10,21 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2023_04_26_211129) do
+ActiveRecord::Schema[7.0].define(version: 2023_05_11_014958) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
+
+  create_table "api_keys", force: :cascade do |t|
+    t.string "bearer_type"
+    t.bigint "bearer_id"
+    t.string "token_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "revoked_at"
+    t.index ["bearer_type", "bearer_id"], name: "index_api_keys_on_bearer"
+    t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
+  end
 
   create_table "games", force: :cascade do |t|
     t.string "name"
@@ -96,6 +107,14 @@ ActiveRecord::Schema[7.0].define(version: 2023_04_26_211129) do
     t.index ["priority", "created_at"], name: "index_good_jobs_jobs_on_priority_created_at_when_unfinished", order: { priority: "DESC NULLS LAST" }, where: "(finished_at IS NULL)"
     t.index ["queue_name", "scheduled_at"], name: "index_good_jobs_on_queue_name_and_scheduled_at", where: "(finished_at IS NULL)"
     t.index ["scheduled_at"], name: "index_good_jobs_on_scheduled_at", where: "(finished_at IS NULL)"
+  end
+
+  create_table "users", force: :cascade do |t|
+    t.string "email", null: false
+    t.string "password_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["email"], name: "index_users_on_email", unique: true
   end
 
 end
