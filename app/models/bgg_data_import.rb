@@ -12,7 +12,7 @@ class BggDataImport
       # should also have a delay of 1 min (maybe less? some people are using 10 seconds) after the previous one was executed
       url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
       xml = parse(url)
-      parse_data(xml)
+      parse_data(xml) unless xml.nil?
       sleep(30.seconds)
     end
   end
@@ -48,7 +48,13 @@ class BggDataImport
 
   def parse(url)
     response = Faraday.get(url)
-    # only parse if response is ok / 200
-    Ox.parse(response.body)
+
+    if response.success?
+      Ox.parse(response.body)
+    else
+      Rails.logger.warn { "Request for #{url} failed" }
+      Rails.logger.warn { "Request returned #{response.code}, #{response.reason_phrase}" }
+      nil
+    end
   end
 end
