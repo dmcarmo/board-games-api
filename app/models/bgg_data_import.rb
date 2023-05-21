@@ -60,7 +60,7 @@ class BggDataImport
 
   def language_dependence_parser(boardgame)
     language_poll = boardgame.locate("poll[@name=language_dependence]/*/*").map do |element|
-      { votes: element.attributes[:numvotes].to_i, value: element.attributes[:value].to_i }
+      { votes: element.attributes[:numvotes].to_i, value: element.attributes[:value] }
     end
     # language_dependence = language_poll.max_by { |element| element[:votes] }[:value]
     # [language_poll, language_dependence] # will need to change the db to save the full poll
