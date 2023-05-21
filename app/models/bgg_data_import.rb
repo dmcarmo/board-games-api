@@ -1,4 +1,5 @@
 require "faraday"
+require "open-uri"
 require "ox"
 
 class BggDataImport
@@ -23,9 +24,13 @@ class BggDataImport
     boardgames = xml.locate("items/item")
     boardgames.each do |boardgame|
       boardgame_data = boardgame_parser(boardgame)
+      image_url = boardgame_data.delete(:image_url)
       game = Game.find_by(bgg_id: boardgame_data[:bgg_id])
       if game.nil?
-        Game.create(boardgame_data)
+        game = Game.create(boardgame_data)
+        file = URI.parse(image_url).open
+        extension = file.base_uri.path.split(".").last
+        game.image.attach(io: file, filename: "cover.#{extension}", content_type: "image/#{extension}")
       else
         game.update(boardgame_data)
       end
@@ -48,7 +53,8 @@ class BggDataImport
       year_published: year,
       min_players: min_players,
       max_players: max_players,
-      language_dependence: language_dependence
+      language_dependence: language_dependence,
+      image_url: image_url
     }
   end
 
