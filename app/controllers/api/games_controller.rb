@@ -1,8 +1,15 @@
 # frozen_string_literal: true
 
 class Api::GamesController < Api::BaseController
+  after_action { pagy_headers_merge(@pagy) if @pagy }
+
   def index
-    @games = Game.all
+    @pagy, @games = if params[:search].present?
+                      pagy(Game.search_by_name(params[:search]))
+                    else
+                      pagy(Game.all)
+                    end
+    
     render json: @games
   end
 
