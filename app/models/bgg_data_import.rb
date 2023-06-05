@@ -4,10 +4,10 @@ require "ox"
 
 class BggDataImport
   def run
-    # ids_range = (1..last_id)
-    ids_range = (1..5)
-    # ids_range.each_slice(1200) do |ids|
-    ids_range.each_slice(2) do |ids|
+    ids_range = (1..last_id)
+    # ids_range = (1..5)
+    ids_range.each_slice(1200) do |ids|
+    # ids_range.each_slice(2) do |ids|
       # each slice/batch should be scheduled into a job
       # each job should be able to handle timeout errors and implement exponential back-off
       # should also have a delay of 1 min (maybe less? some people are using 10 seconds) after the previous one was executed
@@ -28,9 +28,9 @@ class BggDataImport
       game = Game.find_by(bgg_id: boardgame_data[:bgg_id])
       if game.nil?
         game = Game.create(boardgame_data)
-        file = URI.parse(image_url).open
-        extension = file.base_uri.path.split(".").last
-        game.image.attach(io: file, filename: "cover.#{extension}", content_type: "image/#{extension}")
+        # file = URI.parse(image_url).open
+        # extension = file.base_uri.path.split(".").last
+        # game.image.attach(io: file, filename: "cover.#{extension}", content_type: "image/#{extension}")
       else
         game.update(boardgame_data)
       end
