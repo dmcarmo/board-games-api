@@ -2,6 +2,9 @@ require "faraday"
 require "open-uri"
 require "ox"
 
+OpenURI::Buffer.send :remove_const, 'StringMax' if OpenURI::Buffer.const_defined?('StringMax')
+OpenURI::Buffer.const_set 'StringMax', 0
+
 class BggDataImport
   def run
     ids_range = Rails.env.production? ? (1..last_id) : (1..5)
@@ -26,7 +29,6 @@ class BggDataImport
           file = URI.parse(image_url).open
           filename = file.base_uri.path.split("/").last
           extension = filename.split(".").last
-          # path = image_params[:image].tempfile.path
           resized = ImageProcessing::MiniMagick
                     .source(file)
                     .resize_to_limit(1024, 1024)
