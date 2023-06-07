@@ -4,17 +4,11 @@ require "ox"
 
 class BggDataImport
   def run
-    ids_range = (1..last_id)
-    # ids_range = (1..5)
-    ids_range.each_slice(1200) do |ids|
-    # ids_range.each_slice(2) do |ids|
-      # each slice/batch should be scheduled into a job
-      # each job should be able to handle timeout errors and implement exponential back-off
-      # should also have a delay of 1 min (maybe less? some people are using 10 seconds) after the previous one was executed
+    ids_range = Rails.env.production? ? (1..last_id) : (1..5)
+    ids_range.each_slice(1100) do |ids|
       url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
       xml = parse(url)
       parse_data(xml) unless xml.nil?
-      sleep(30.seconds)
     end
   end
 
@@ -28,9 +22,17 @@ class BggDataImport
       game = Game.find_by(bgg_id: boardgame_data[:bgg_id])
       if game.nil?
         game = Game.create(boardgame_data)
-        # file = URI.parse(image_url).open
-        # extension = file.base_uri.path.split(".").last
-        # game.image.attach(io: file, filename: "cover.#{extension}", content_type: "image/#{extension}")
+        if Rails.env.production?
+          file = URI.parse(image_url).open
+          filename = file.base_uri.path.split("/").last
+          extension = filename.split(".").last
+          # path = image_params[:image].tempfile.path
+          resized = ImageProcessing::MiniMagick
+                    .source(file)
+                    .resize_to_limit(1024, 1024)
+                    .call
+          game.image.attach(io: resized, filename: filename, content_type: "image/#{extension}")
+        end
       else
         game.update(boardgame_data)
       end
@@ -64,7 +66,7 @@ class BggDataImport
     end
     # language_dependence = language_poll.max_by { |element| element[:votes] }[:value]
     # [language_poll, language_dependence] # will need to change the db to save the full poll
-    language_poll.max_by { |element| element[:votes] }[:value]
+    language_poll.empty? ? nil : language_poll.max_by { |element| element[:votes] }[:value]
   end
 
   def last_id
@@ -74,14 +76,27 @@ class BggDataImport
   end
 
   def parse(url)
-    response = Faraday.get(url)
+    retries = 0
+    max_retries = 8
+    begin
+      response = Faraday.get(url)
 
-    if response.success?
-      Ox.parse(response.body)
-    else
-      Rails.logger.warn { "Request for #{url} failed" }
-      Rails.logger.warn { "Request returned #{response.code}, #{response.reason_phrase}" }
-      nil
+      if response.success?
+        Ox.parse(response.body)
+      else
+        Rails.logger.warn { "Request for #{url} failed" }
+        Rails.logger.warn { "Request returned #{response.status}, #{response.reason_phrase}" }
+        nil
+      end
+    rescue Faraday::TimeoutError
+      puts url
+      raise "Giving up on the server after #{retries} retries. Got error: #{e.message}" unless retries <= max_retries
+
+      sleep_time = (2**retries) + 10
+      puts "Sleeping for #{sleep_time} seconds"
+      retries += 1
+      sleep sleep_time
+      retry
     end
   end
 end
