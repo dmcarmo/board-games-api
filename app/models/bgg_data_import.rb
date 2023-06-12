@@ -25,15 +25,29 @@ class BggDataImport
       game = Game.find_by(bgg_id: boardgame_data[:bgg_id])
       if game.nil?
         game = Game.create(boardgame_data)
-        if Rails.env.production?
-          file = URI.parse(image_url).open
-          filename = file.base_uri.path.split("/").last
-          extension = filename.split(".").last
-          resized = ImageProcessing::MiniMagick
-                    .source(file)
-                    .resize_to_limit(1024, 1024)
-                    .call
-          game.image.attach(io: resized, filename: filename, content_type: "image/#{extension}")
+        if Rails.env.production? && !image_url.nil?
+          retries = 0
+          max_retries = 8
+          begin
+            file = URI.parse(image_url).open
+            filename = file.base_uri.path.split("/").last
+            extension = filename.split(".").last
+            type = extension == "jpg" ? "image/jpeg" : "image/#{extension}"
+            resized = ImageProcessing::MiniMagick
+                      .source(file)
+                      .resize_to_limit(1024, 1024)
+                      .call
+            game.image.attach(io: resized, filename: filename, content_type: type)
+          rescue Errno::ECONNRESET => e
+            puts url
+            raise "Giving up on the server after #{retries} retries. Got error: #{e.message}" unless retries <= max_retries
+
+            sleep_time = (2**retries) + 10
+            puts "Sleeping for #{sleep_time} seconds"
+            retries += 1
+            sleep sleep_time
+            retry
+          end
         end
       else
         game.update(boardgame_data)
@@ -90,7 +104,7 @@ class BggDataImport
         Rails.logger.warn { "Request returned #{response.status}, #{response.reason_phrase}" }
         nil
       end
-    rescue Faraday::TimeoutError
+    rescue Faraday::TimeoutError => e
       puts url
       raise "Giving up on the server after #{retries} retries. Got error: #{e.message}" unless retries <= max_retries
 
