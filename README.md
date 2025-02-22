@@ -1,24 +1,11 @@
 # README
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+## Development
 
-Things you may want to cover:
+* rails db:create db:migrate
+* rails s
+* bundle exec good_job start
 
-* Ruby version
+## Production
 
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+* secrets are set in `credentials.yml.enc` so we need to pass `RAILS_MASTER_KEY` as a env variable with the value from the local `master.key`
