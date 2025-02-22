@@ -5,14 +5,14 @@ require "ox"
 OpenURI::Buffer.send :remove_const, 'StringMax' if OpenURI::Buffer.const_defined?('StringMax')
 OpenURI::Buffer.const_set 'StringMax', 0
 
-class BggDataImport
-  def run
-    ids_range = Rails.env.production? ? (1..last_id) : (1..5)
-    ids_range.each_slice(20) do |ids|
-      url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
-      xml = parse(url)
-      parse_data(xml) unless xml.nil?
-    end
+class BggDataImportJob < ApplicationJob
+  queue_as :default
+  retry_on StandardError, wait: :exponentially_longer, attempts: 5
+
+  def perform(ids)
+    url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
+    xml = parse(url)
+    parse_data(xml) unless xml.nil?
   end
 
   private
@@ -25,32 +25,7 @@ class BggDataImport
       game = Game.find_by(bgg_id: boardgame_data[:bgg_id])
       if game.nil?
         game = Game.create(boardgame_data)
-        if Rails.env.production? && !image_url.nil?
-          retries = 0
-          max_retries = 8
-          begin
-            file = URI.parse(image_url).open
-            filename = file.base_uri.path.split("/").last
-            extension = filename.split(".").last
-            type = extension == "jpg" ? "image/jpeg" : "image/#{extension}"
-            resized = ImageProcessing::MiniMagick
-                      .source(file)
-                      .resize_to_limit(1024, 1024)
-                      .call
-            game.image.attach(io: resized, filename: filename, content_type: type)
-          rescue Errno::ECONNRESET => e
-            puts url
-            unless retries <= max_retries
-              raise "Giving up on the server after #{retries} retries. Got error: #{e.message}"
-            end
-
-            sleep_time = (2**retries) + 10
-            puts "Sleeping for #{sleep_time} seconds"
-            retries += 1
-            sleep sleep_time
-            retry
-          end
-        end
+        attach_image(game, image_url) if Rails.env.production? && !image_url.nil?
       else
         game.update(boardgame_data)
       end
@@ -87,27 +62,21 @@ class BggDataImport
     language_poll.empty? ? nil : language_poll.max_by { |element| element[:votes] }[:value]
   end
 
-  def last_id
-    rss_url = "https://boardgamegeek.com/recentadditions/rss?subdomain=&infilters%5B0%5D=thing&infilters%5B1%5D=thinglinked&domain=boardgame"
-    recent_additions = parse(rss_url)
-    recent_additions.locate("rss/channel/item/link/^Text").map { |url| url.split("/")[4].to_i }.max
-  end
-
-  def parse(url)
+  def attach_image(game, image_url)
     retries = 0
     max_retries = 8
     begin
-      response = Faraday.get(url)
-
-      if response.success?
-        Ox.parse(response.body)
-      else
-        Rails.logger.warn { "Request for #{url} failed" }
-        Rails.logger.warn { "Request returned #{response.status}, #{response.reason_phrase}" }
-        nil
-      end
-    rescue Faraday::TimeoutError => e
-      puts url
+      file = URI.parse(image_url).open
+      filename = file.base_uri.path.split("/").last
+      extension = filename.split(".").last
+      type = extension == "jpg" ? "image/jpeg" : "image/#{extension}"
+      resized = ImageProcessing::MiniMagick
+                .source(file)
+                .resize_to_limit(1024, 1024)
+                .call
+      game.image.attach(io: resized, filename: filename, content_type: type)
+    rescue Errno::ECONNRESET => e
+      puts image_url
       raise "Giving up on the server after #{retries} retries. Got error: #{e.message}" unless retries <= max_retries
 
       sleep_time = (2**retries) + 10
@@ -116,5 +85,19 @@ class BggDataImport
       sleep sleep_time
       retry
     end
+  end
+
+  def parse(url)
+    response = Faraday.get(url)
+    if response.success?
+      Ox.parse(response.body)
+    else
+      Rails.logger.warn { "Request for #{url} failed" }
+      Rails.logger.warn { "Request returned #{response.status}, #{response.reason_phrase}" }
+      nil
+    end
+  rescue Faraday::TimeoutError => e
+    puts url
+    raise "Giving up on the server. Got error: #{e.message}"
   end
 end
