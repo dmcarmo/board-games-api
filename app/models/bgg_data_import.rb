@@ -8,7 +8,7 @@ OpenURI::Buffer.const_set 'StringMax', 0
 class BggDataImport
   def run
     ids_range = Rails.env.production? ? (1..last_id) : (1..5)
-    ids_range.each_slice(1100) do |ids|
+    ids_range.each_slice(20) do |ids|
       url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
       xml = parse(url)
       parse_data(xml) unless xml.nil?
@@ -40,7 +40,9 @@ class BggDataImport
             game.image.attach(io: resized, filename: filename, content_type: type)
           rescue Errno::ECONNRESET => e
             puts url
-            raise "Giving up on the server after #{retries} retries. Got error: #{e.message}" unless retries <= max_retries
+            unless retries <= max_retries
+              raise "Giving up on the server after #{retries} retries. Got error: #{e.message}"
+            end
 
             sleep_time = (2**retries) + 10
             puts "Sleeping for #{sleep_time} seconds"
