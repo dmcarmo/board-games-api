@@ -7,7 +7,7 @@ OpenURI::Buffer.const_set 'StringMax', 0
 
 class BggDataImportJob < ApplicationJob
   queue_as :default
-  retry_on StandardError, wait: :exponentially_longer, attempts: 5
+  retry_on Faraday::TimeoutError, wait: ->(attempt) { (2**attempt) + rand(1..5) }, attempts: 5
 
   def perform(ids)
     url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{ids.join(',')}"
