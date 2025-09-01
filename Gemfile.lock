@@ -86,6 +86,10 @@ GEM
     debug (1.11.0)
       irb (~> 1.10)
       reline (>= 0.3.8)
+    dotenv (3.1.8)
+    dotenv-rails (3.1.8)
+      dotenv (= 3.1.8)
+      railties (>= 6.1)
     drb (2.2.3)
     erb (5.0.2)
     erubi (1.13.1)
@@ -147,6 +151,7 @@ GEM
       timeout
     net-smtp (0.5.1)
       net-protocol
+    newrelic_rpm (9.21.0)
     nio4r (2.7.4)
     nokogiri (1.18.9-x86_64-linux-gnu)
       racc (~> 1.4)
@@ -236,9 +241,11 @@ DEPENDENCIES
   bcrypt (~> 3.1.7)
   bootsnap
   debug
+  dotenv-rails
   faraday
   good_job
   image_processing (~> 1.2)
+  newrelic_rpm
   ox
   pagy (~> 6.0)
   pg (~> 1.1)
