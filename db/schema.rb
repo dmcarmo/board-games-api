@@ -10,8 +10,9 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_23_002532) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_02_032953) do
   # These are extensions that must be enabled in order to support this database
+  enable_extension "pg_trgm"
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
 
@@ -63,6 +64,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_23_002532) do
     t.integer "min_players"
     t.integer "max_players"
     t.string "language_dependence"
+    t.bigint "base_game_id"
+    t.index ["base_game_id"], name: "index_games_on_base_game_id"
   end
 
   create_table "good_job_batches", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -164,4 +167,5 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_23_002532) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "games", "games", column: "base_game_id"
 end
