@@ -36,5 +36,6 @@ module BoardGamesApi
     config.middleware.use ActionDispatch::Session::CookieStore
     # set queue_adapter to GoodJob
     config.active_job.queue_adapter = :good_job
+    config.active_storage.queues.analysis = :image_analysis
   end
 end
