@@ -4,10 +4,19 @@ require "ox"
 class ImportJob < ApplicationJob
   queue_as :default
 
-  def perform
-    ids_range = Rails.env.production? ? (1..last_id) : (1..5)
-    ids_range.each_slice(20) do |ids|
-      BggDataImportJob.set(wait: 3.seconds).perform_later(ids)
+  BATCH_SIZE = 1000
+
+  def perform(update_existing: false)
+    full_range_of_ids = Rails.env.production? ? (1..last_id).to_a : (1..30).to_a
+    ids_to_process = if update_existing
+                       full_range_of_ids
+                     else
+                       existing_ids = Game.where(bgg_id: full_range_of_ids).pluck(:bgg_id)
+                       full_range_of_ids - existing_ids
+                     end
+
+    ids_to_process.each_slice(BATCH_SIZE) do |ids|
+      BggDataImportJob.perform_later(ids, BATCH_SIZE, update_existing: update_existing)
     end
   end
 

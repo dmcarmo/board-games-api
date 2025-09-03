@@ -57,7 +57,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_02_032953) do
 
   create_table "games", force: :cascade do |t|
     t.string "name"
-    t.string "bgg_id"
+    t.integer "bgg_id"
     t.string "year_published"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
