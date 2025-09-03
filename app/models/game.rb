@@ -6,6 +6,27 @@ class Game < ApplicationRecord
   WEB_URL = "https://boardgamegeek.com/boardgame/"
   API_URL = "https://boardgamegeek.com/xmlapi2/"
 
+  LANGUAGE_DEPENDENCE_MAP = {
+    "No necessary" => :no_necessary,
+    "Some necessary" => :some_necessary,
+    "Moderate" => :moderate,
+    "Extensive" => :extensive,
+    "Unplayable" => :unplayable
+  }.freeze
+
+  def self.map_language_dependence(value)
+    key = LANGUAGE_DEPENDENCE_MAP.keys.find { |prefix| value.start_with?(prefix) }
+    LANGUAGE_DEPENDENCE_MAP[key]
+  end
+
+  enum :language_dependence, {
+    no_necessary: 1,
+    some_necessary: 2,
+    moderate: 3,
+    extensive: 4,
+    unplayable: 5
+  }
+
   belongs_to :base_game, class_name: "Game", optional: true
   has_many :expansions, class_name: "Game", foreign_key: "base_game_id"
   has_one_attached :image
