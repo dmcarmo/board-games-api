@@ -2,12 +2,12 @@
 
 class Api::GamesController < Api::BaseController
   def index
-    games = Game.all
+    games = Game.all.order(:bgg_id)
     games = filter_games(games, params[:filter])
     games = search_games(games, params)
     games = games.search_by_bgg_id(params[:bgg_id]) if params[:bgg_id].present?
 
-    pagy, games = pagy(games)
+    pagy, games = pagy(games, items: 50)
 
     pagy_headers_merge(pagy)
 
@@ -18,16 +18,23 @@ class Api::GamesController < Api::BaseController
   end
 
   def show
-    @game = Game.find(params[:id])
+    game = Game.find(params[:id])
     render json: {
-      id: @game.id,
-      name: @game.name,
-      bgg_id: @game.bgg_id,
-      year_published: @game.year_published,
-      min_players: @game.min_players,
-      max_players: @game.max_players,
-      language_dependence: @game.language_dependence,
-      image_url: url_for(@game.image)
+      id: game.id,
+      name: game.name,
+      bgg_id: game.bgg_id,
+      base_game_id: game.base_game_id,
+      year_published: game.year_published,
+      min_players: game.min_players,
+      max_players: game.max_players,
+      best_at: game.best_at,
+      recommended_at: game.recommended_at,
+      min_playtime: game.min_playtime,
+      max_playtime: game.max_playtime,
+      min_age: game.min_age,
+      alternative_names: game.alternative_names,
+      language_dependence: game.language_dependence,
+      image_url: url_for(game.image)
     }
   end
 

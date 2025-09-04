@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_09_02_032953) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_03_021942) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_trgm"
   enable_extension "pgcrypto"
@@ -63,8 +63,14 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_02_032953) do
     t.datetime "updated_at", null: false
     t.integer "min_players"
     t.integer "max_players"
-    t.string "language_dependence"
+    t.integer "language_dependence"
     t.bigint "base_game_id"
+    t.integer "min_playtime"
+    t.integer "max_playtime"
+    t.string "min_age"
+    t.string "best_at"
+    t.string "recommended_at"
+    t.string "alternative_names", default: [], array: true
     t.index ["base_game_id"], name: "index_games_on_base_game_id"
   end
 
