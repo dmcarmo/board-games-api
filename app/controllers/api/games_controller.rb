@@ -2,12 +2,12 @@
 
 class Api::GamesController < Api::BaseController
   def index
-    games = Game.all
+    games = Game.all.order(:bgg_id)
     games = filter_games(games, params[:filter])
     games = search_games(games, params)
     games = games.search_by_bgg_id(params[:bgg_id]) if params[:bgg_id].present?
 
-    pagy, games = pagy(games)
+    pagy, games = pagy(games, items: 50)
 
     pagy_headers_merge(pagy)
 
