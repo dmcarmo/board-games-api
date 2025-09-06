@@ -122,7 +122,9 @@ class BggDataImportJob < ApplicationJob
   def find_base_game_id(xml)
     return unless xml.attributes[:type] == "boardgameexpansion"
 
-    xml.locate("link[@type=boardgameexpansion]/@id").first&.to_i
+    xml.locate("link").find do |element|
+      element[:type] == "boardgameexpansion" && element[:inbound] == "true"
+    end&.[](:id)&.to_i
   end
 
   def find_altername_names(xml)
