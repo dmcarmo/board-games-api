@@ -16,12 +16,15 @@ class BggDataImportJob < ApplicationJob
   retry_on Faraday::ServerError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
 
   def self.exponential_backoff(attempt)
-    (2**attempt) + rand(1..5)
+    # Ensure minimum wait time respects API throttling (5 seconds minimum)
+    base_wait = 2**attempt
+    [base_wait, MIN_DURATION].max
   end
   private_class_method :exponential_backoff
 
   def perform(ids, batch_size, update_existing: false)
-    buffer = []
+    base_games_buffer = []
+    expansions_buffer = []
     image_jobs = []
 
     ids.each_slice(MAX_BGG_ID_SLICE) do |api_ids|
@@ -29,12 +32,16 @@ class BggDataImportJob < ApplicationJob
       url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{api_ids.join(',')}"
       xml = parse(url)
       if xml
-        parse_data(xml) do |batch_games, batch_images|
-          buffer.concat(batch_games)
+        parse_data(xml) do |batch_games, batch_expansions, batch_images|
+          base_games_buffer.concat(batch_games)
+          expansions_buffer.concat(batch_expansions)
           image_jobs.concat(batch_images)
 
           # Flush buffer if reached batch_size
-          flush_buffer(buffer, image_jobs, update_existing: update_existing) if buffer.size >= batch_size
+          if (base_games_buffer.size + expansions_buffer.size) >= batch_size
+            flush_buffer(base_games_buffer, expansions_buffer, image_jobs,
+                         update_existing: update_existing)
+          end
         end
       end
 
@@ -43,21 +50,29 @@ class BggDataImportJob < ApplicationJob
       remaining = MIN_DURATION - elapsed
       sleep(remaining) if remaining.positive?
     end
-    flush_buffer(buffer, image_jobs, update_existing: update_existing) if buffer.any?
+    return unless base_games_buffer.any? || expansions_buffer.any?
+
+    flush_buffer(base_games_buffer, expansions_buffer, image_jobs,
+                 update_existing: update_existing)
   end
 
   private
 
   def parse_data(xml)
     batch_games = []
+    batch_expansions = []
     batch_images = []
     boardgames = xml.locate("items/item")
     boardgames.each do |boardgame|
       game, image = boardgame_parser(boardgame)
-      batch_games << game
+      if game[:base_game_id].nil?
+        batch_games << game
+      else
+        batch_expansions << game
+      end
       batch_images << image
     end
-    yield batch_games, batch_images
+    yield batch_games, batch_expansions, batch_images
   end
 
   def boardgame_parser(boardgame)
@@ -68,8 +83,8 @@ class BggDataImportJob < ApplicationJob
     image_url = boardgame.locate("image/*").first
     min_players = boardgame.locate("minplayers/@value").first&.to_i
     max_players = boardgame.locate("maxplayers/@value").first&.to_i
-    best_at = boardgame.locate("poll-summary[@name=suggested_numplayers]/result[@name=bestwith]/@value").first.match(/(\d+(?:\D\d+)?)/)[1]
-    recommended_at = boardgame.locate("poll-summary[@name=suggested_numplayers]/result[@name=recommmendedwith]/@value").first.match(/(\d+(?:\D\d+)?)/)[1]
+    best_at = boardgame.locate("poll-summary[@name=suggested_numplayers]/result[@name=bestwith]/@value").first.match(/(\d+(?:\D\d+)?)/)&.[](1)
+    recommended_at = boardgame.locate("poll-summary[@name=suggested_numplayers]/result[@name=recommmendedwith]/@value").first.match(/(\d+(?:\D\d+)?)/)&.[](1)
     min_playtime = boardgame.locate("minplaytime/@value").first&.to_i
     max_playtime = boardgame.locate("maxplaytime/@value").first&.to_i
     min_age = boardgame.locate("minage/@value").first&.to_i
@@ -100,6 +115,8 @@ class BggDataImportJob < ApplicationJob
         image_url: image_url
       }
     ]
+  rescue StandardError => e
+    raise "Failed to parse boardgame ID #{bgg_id} (#{name}): #{e.message}"
   end
 
   def find_base_game_id(xml)
@@ -137,15 +154,19 @@ class BggDataImportJob < ApplicationJob
     raise
   end
 
-  def flush_buffer(buffer, image_jobs, update_existing: false)
-    return if buffer.empty?
+  def flush_buffer(base_games_buffer, expansions_buffer, image_jobs, update_existing: false)
+    return if base_games_buffer.empty? && expansions_buffer.empty?
 
     if update_existing
-      Game.upsert_all(buffer, unique_by: :bgg_id)
+      Game.upsert_all(base_games_buffer, unique_by: :bgg_id) if base_games_buffer.any?
+      Game.upsert_all(expansions_buffer, unique_by: :bgg_id) if expansions_buffer.any?
     else
-      Game.insert_all(buffer)
+      Game.insert_all(base_games_buffer) if base_games_buffer.any?
+      Game.insert_all(expansions_buffer) if expansions_buffer.any?
     end
-    buffer.clear
+
+    base_games_buffer.clear
+    expansions_buffer.clear
 
     image_jobs.each { |image| ImageAttachJob.perform_later(image[:bgg_id], image[:image_url]) }
     image_jobs.clear
