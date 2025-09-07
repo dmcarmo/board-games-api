@@ -1,3 +1,5 @@
+require "open-uri"
+
 class ImageAttachJob < ApplicationJob
   queue_as :image_attach
 

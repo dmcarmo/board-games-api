@@ -65,10 +65,10 @@ class BggDataImportJob < ApplicationJob
     boardgames = xml.locate("items/item")
     boardgames.each do |boardgame|
       game, image = boardgame_parser(boardgame)
-      if game[:base_game_id].nil?
-        batch_games << game
-      else
+      if boardgame.attributes[:type] == "boardgameexpansion"
         batch_expansions << game
+      else
+        batch_games << game
       end
       batch_images << image
     end
@@ -161,10 +161,16 @@ class BggDataImportJob < ApplicationJob
 
     if update_existing
       Game.upsert_all(base_games_buffer, unique_by: :bgg_id) if base_games_buffer.any?
-      Game.upsert_all(expansions_buffer, unique_by: :bgg_id) if expansions_buffer.any?
+      if expansions_buffer.any?
+        convert_bgg_ids_to_db_ids(expansions_buffer)
+        Game.upsert_all(expansions_buffer, unique_by: :bgg_id)
+      end
     else
       Game.insert_all(base_games_buffer) if base_games_buffer.any?
-      Game.insert_all(expansions_buffer) if expansions_buffer.any?
+      if expansions_buffer.any?
+        convert_bgg_ids_to_db_ids(expansions_buffer)
+        Game.insert_all(expansions_buffer)
+      end
     end
 
     base_games_buffer.clear
@@ -172,5 +178,15 @@ class BggDataImportJob < ApplicationJob
 
     image_jobs.each { |image| ImageAttachJob.perform_later(image[:bgg_id], image[:image_url]) }
     image_jobs.clear
+  end
+
+  def convert_bgg_ids_to_db_ids(expansions_buffer)
+    # Convert BGG base_game_id to actual database ID (modifies buffer in place)
+    bgg_ids = expansions_buffer.map { |expansion| expansion[:base_game_id] }.compact.uniq
+    bgg_to_db_id_map = Game.where(bgg_id: bgg_ids).pluck(:bgg_id, :id).to_h
+
+    expansions_buffer.each do |expansion|
+      expansion[:base_game_id] = bgg_to_db_id_map[expansion[:base_game_id]]
+    end
   end
 end

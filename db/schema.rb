@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_09_03_021942) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_07_012540) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_trgm"
   enable_extension "pgcrypto"
@@ -72,6 +72,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_03_021942) do
     t.string "recommended_at"
     t.string "alternative_names", default: [], array: true
     t.index ["base_game_id"], name: "index_games_on_base_game_id"
+    t.index ["bgg_id"], name: "index_games_on_bgg_id", unique: true
   end
 
   create_table "good_job_batches", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
