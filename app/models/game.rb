@@ -15,11 +15,14 @@ class Game < ApplicationRecord
   }.freeze
 
   def self.map_language_dependence(value)
+    return :not_available if value.nil?
+
     key = LANGUAGE_DEPENDENCE_MAP.keys.find { |prefix| value.start_with?(prefix) }
     LANGUAGE_DEPENDENCE_MAP[key]
   end
 
   enum :language_dependence, {
+    not_available: 0,
     no_necessary: 1,
     some_necessary: 2,
     moderate: 3,
