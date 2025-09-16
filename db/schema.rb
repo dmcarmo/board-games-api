@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_09_07_012540) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_15_211958) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_trgm"
   enable_extension "pgcrypto"
@@ -53,6 +53,33 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_07_012540) do
     t.datetime "revoked_at"
     t.index ["bearer_type", "bearer_id"], name: "index_api_keys_on_bearer"
     t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
+  end
+
+  create_table "collection_games", force: :cascade do |t|
+    t.bigint "collection_id", null: false
+    t.bigint "game_id", null: false
+    t.boolean "own"
+    t.boolean "previously_owned"
+    t.boolean "for_trade"
+    t.boolean "want"
+    t.boolean "want_to_play"
+    t.boolean "want_to_buy"
+    t.integer "wishlist"
+    t.boolean "preordered"
+    t.datetime "last_modified", precision: nil
+    t.integer "number_of_plays"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["collection_id"], name: "index_collection_games_on_collection_id"
+    t.index ["game_id"], name: "index_collection_games_on_game_id"
+  end
+
+  create_table "collections", force: :cascade do |t|
+    t.string "bgg_username", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["bgg_username"], name: "index_collections_on_bgg_username"
   end
 
   create_table "games", force: :cascade do |t|
@@ -174,5 +201,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_07_012540) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "collection_games", "collections"
+  add_foreign_key "collection_games", "games"
   add_foreign_key "games", "games", column: "base_game_id"
 end

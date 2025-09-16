@@ -14,13 +14,6 @@ class Game < ApplicationRecord
     "Unplayable" => :unplayable
   }.freeze
 
-  def self.map_language_dependence(value)
-    return :not_available if value.nil?
-
-    key = LANGUAGE_DEPENDENCE_MAP.keys.find { |prefix| value.start_with?(prefix) }
-    LANGUAGE_DEPENDENCE_MAP[key]
-  end
-
   enum :language_dependence, {
     not_available: 0,
     no_necessary: 1,
@@ -30,6 +23,7 @@ class Game < ApplicationRecord
     unplayable: 5
   }
 
+  has_many :collection_games, dependent: :destroy
   belongs_to :base_game, class_name: "Game", optional: true
   has_many :expansions, class_name: "Game", foreign_key: "base_game_id"
   has_one_attached :image
@@ -44,6 +38,13 @@ class Game < ApplicationRecord
                   using: {
                     trigram: {}
                   }
+
+  def self.map_language_dependence(value)
+    return :not_available if value.nil?
+
+    key = LANGUAGE_DEPENDENCE_MAP.keys.find { |prefix| value.start_with?(prefix) }
+    LANGUAGE_DEPENDENCE_MAP[key]
+  end
 
   def base_game?
     base_game_id.nil?

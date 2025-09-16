@@ -1,0 +1,29 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  collection: one
+  game: one
+  own: false
+  prev_owned: false
+  for_trade: false
+  want: false
+  want_to_play: false
+  want_to_buy: false
+  wishlist: 1
+  preordered: false
+  last_modified: 2025-09-15 22:19:58
+  number_of_plays: 1
+
+two:
+  collection: two
+  game: two
+  own: false
+  prev_owned: false
+  for_trade: false
+  want: false
+  want_to_play: false
+  want_to_buy: false
+  wishlist: 1
+  preordered: false
+  last_modified: 2025-09-15 22:19:58
+  number_of_plays: 1
