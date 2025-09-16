@@ -68,6 +68,9 @@
 
 #### Search Games
 
+* Search
+  * by default the response only returns name, bgg_id, year_published and image_url
+  * to display the full response add `extended=true` to the query params
 * Search - partial match
   * Request
     * GET `/games?name=stop`
