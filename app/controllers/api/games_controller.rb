@@ -2,7 +2,7 @@
 
 class Api::GamesController < Api::BaseController
   def index
-    games = Game.all.order(:bgg_id)
+    games = Game.all.includes(image_attachment: :blob).order(:bgg_id)
     games = filter_games(games, params[:filter])
     games = search_games(games, params)
     games = games.search_by_bgg_id(params[:bgg_id]) if params[:bgg_id].present?
@@ -11,8 +11,20 @@ class Api::GamesController < Api::BaseController
 
     pagy_headers_merge(pagy)
 
+    unless params[:extended] == "true"
+      games = games.map do |game|
+        {
+          id: game.id,
+          name: game.name,
+          bgg_id: game.bgg_id,
+          year_published: game.year_published,
+          image_url: game.image_url
+        }
+      end
+    end
+
     render json: {
-      games: games,
+      games: games.as_json(methods: [:image_url]),
       pagination: pagy_metadata(pagy)
     }
   end

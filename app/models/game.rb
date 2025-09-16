@@ -53,4 +53,8 @@ class Game < ApplicationRecord
   def expansion?
     base_game_id.present?
   end
+
+  def image_url
+    Rails.application.routes.url_helpers.url_for(image) if image.attached?
+  end
 end
