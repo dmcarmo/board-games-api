@@ -95,3 +95,19 @@
     * Authorization header using Bearer Token
   * Response
     * `{"id": 12377, "name": "Can't Stop", "bgg_id": "41", "year_published": "1980", "created_at": "2025-02-23T00:48:12.693Z", "updated_at": "2025-02-23T01:57:12.422Z", "min_players": 2, "max_players": 4, "language_dependence": "No necessary in-game text", "image_url": "URL"}`
+
+#### Show Collections
+
+* Show
+  * Request
+    * GET `/collections/USERNAME`
+    * Authorization header using Bearer Token
+  * Response
+    * `{"id": 4, "bgg_username": "USERNAME", "status": "sync_completed", "updated_at": "2025-09-16T02:00:13.227Z", "games": []}`
+* Get collection from user
+  * Request
+    * POST `/collections`
+    * Authorization header using Bearer Token
+    * Body: `{"username": "USERNAME"}`
+  * Response
+    * `{"status": "Import in progress."}`
