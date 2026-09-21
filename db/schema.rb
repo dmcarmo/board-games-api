@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_09_15_211958) do
+ActiveRecord::Schema[7.2].define(version: 2026_09_21_110053) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_trgm"
   enable_extension "pgcrypto"
@@ -98,6 +98,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_15_211958) do
     t.string "best_at"
     t.string "recommended_at"
     t.string "alternative_names", default: [], array: true
+    t.text "description"
+    t.float "weight"
+    t.integer "rank"
+    t.float "average_rating"
+    t.float "bayesian_rating"
     t.index ["base_game_id"], name: "index_games_on_base_game_id"
     t.index ["bgg_id"], name: "index_games_on_bgg_id", unique: true
   end
