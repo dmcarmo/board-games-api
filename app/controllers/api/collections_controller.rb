@@ -31,6 +31,7 @@ class Api::CollectionsController < Api::BaseController
             bgg_id: collection_game.game.bgg_id,
             base_game_id: collection_game.game.base_game_id,
             year_published: collection_game.game.year_published,
+            description: collection_game.game.description,
             min_players: collection_game.game.min_players,
             max_players: collection_game.game.max_players,
             best_at: collection_game.game.best_at,
@@ -40,6 +41,10 @@ class Api::CollectionsController < Api::BaseController
             min_age: collection_game.game.min_age,
             alternative_names: collection_game.game.alternative_names,
             language_dependence: collection_game.game.language_dependence,
+            weight: collection_game.game.weight,
+            rank: collection_game.game.rank,
+            average_rating: collection_game.game.average_rating,
+            bayesian_rating: collection_game.game.bayesian_rating,
             image_url: url_for(collection_game.game.image)
           }
         end,

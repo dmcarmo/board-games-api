@@ -37,6 +37,7 @@ class Api::GamesController < Api::BaseController
       bgg_id: game.bgg_id,
       base_game_id: game.base_game_id,
       year_published: game.year_published,
+      description: game.description,
       min_players: game.min_players,
       max_players: game.max_players,
       best_at: game.best_at,
@@ -46,6 +47,10 @@ class Api::GamesController < Api::BaseController
       min_age: game.min_age,
       alternative_names: game.alternative_names,
       language_dependence: game.language_dependence,
+      rank: game.rank,
+      weight: game.weight,
+      average_rating: game.average_rating,
+      bayesian_rating: game.bayesian_rating,
       image_url: url_for(game.image)
     }
   end
