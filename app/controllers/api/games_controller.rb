@@ -31,6 +31,7 @@ class Api::GamesController < Api::BaseController
 
   def show
     game = Game.find(params[:id])
+
     render json: {
       id: game.id,
       name: game.name,
@@ -51,7 +52,7 @@ class Api::GamesController < Api::BaseController
       weight: game.weight,
       average_rating: game.average_rating,
       bayesian_rating: game.bayesian_rating,
-      image_url: url_for(game.image)
+      image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id)
     }
   end
 
