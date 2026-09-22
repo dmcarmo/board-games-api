@@ -25,7 +25,7 @@ class Game < ApplicationRecord
 
   has_many :collection_games, dependent: :destroy
   belongs_to :base_game, class_name: "Game", optional: true
-  has_many :expansions, class_name: "Game", foreign_key: "base_game_id"
+  has_many :expansions, class_name: "Game", foreign_key: "base_game_id", dependent: :destroy
   has_one_attached :image
 
   scope :base_games, -> { where(base_game_id: nil) }
