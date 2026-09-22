@@ -1,44 +1,33 @@
-require "faraday"
-require "ox"
-
 class ImportJob < ApplicationJob
   queue_as :default
 
-  BATCH_SIZE = 1000
+  BATCH_SIZE = 1_000
 
-  def perform(update_existing: false)
-    full_range_of_ids = Rails.env.production? ? (1..last_id).to_a : (1..30).to_a
-    ids_to_process = if update_existing
-                       full_range_of_ids
-                     else
-                       existing_ids = Game.where(bgg_id: full_range_of_ids).pluck(:bgg_id)
-                       full_range_of_ids - existing_ids
-                     end
+  retry_on BggCsvDownloader::DownloadFailed, wait: :polynomially_longer, attempts: 5
 
-    ids_to_process.each_slice(BATCH_SIZE) do |ids|
-      BggDataImportJob.perform_later(ids, BATCH_SIZE, update_existing: update_existing)
-    end
-  end
-
-  private
-
-  def last_id
-    rss_url = "https://boardgamegeek.com/recentadditions/rss?subdomain=&infilters%5B0%5D=thing&infilters%5B1%5D=thinglinked&domain=boardgame"
-    recent_additions = parse(rss_url)
-    recent_additions.locate("rss/channel/item/link/^Text").map { |url| url.split("/")[4].to_i }.max
-  end
-
-  def parse(url)
-    response = Faraday.get(url)
-    if response.success?
-      Ox.parse(response.body)
+  rescue_from BggCsvDownloader::LoginFailed do |error|
+    if error.retryable?
+      retry_job wait: 5.minutes
     else
-      Rails.logger.warn { "Request for #{url} failed" }
-      Rails.logger.warn { "Request returned #{response.status}, #{response.reason_phrase}" }
-      nil
+      Rails.error.report(error)
+      # or: SystemMailer.import_login_failed(error.message).deliver_later
     end
-  rescue Faraday::TimeoutError => e
-    puts url
-    raise "Giving up on the server. Got error: #{e.message}"
+  end
+
+  def perform
+    csv_io = BggCsvDownloader.call
+    result = BggCsvImport.new(csv_io).diff
+
+    limit = ENV["IMPORT_LIMIT"]&.to_i
+    new_attrs = limit ? result.new_attrs.first(limit) : result.new_attrs
+    new_ids = limit ? result.new_ids.first(limit) : result.new_ids
+
+    new_attrs.each_slice(BATCH_SIZE) { |slice| Game.insert_all(slice) }
+
+    return if new_ids.empty?
+
+    GoodJob::Batch.enqueue do
+      new_ids.each_slice(BATCH_SIZE) { |chunk| BggDataImportJob.perform_later(chunk) }
+    end
   end
 end

@@ -10,10 +10,19 @@ class BggDataImportJob < ApplicationJob
 
   MIN_DURATION = ENV.fetch("API_THROTTLE_SECONDS", 5).to_i.seconds
   MAX_BGG_ID_SLICE = 20
+  FLUSH_THRESHOLD = 200
+
+  class BggApiClientError < StandardError; end # 4xx (excluding 429) — not retryable
+  class BggApiServerError < StandardError; end # 5xx and 429 — retryable
 
   retry_on Faraday::TimeoutError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
   retry_on Faraday::ConnectionFailed, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
-  retry_on Faraday::ServerError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
+  retry_on BggApiServerError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
+
+  rescue_from BggApiClientError do |error|
+    Rails.error.report(error)
+    # not retryable — bad token, bad id, or malformed response; retrying won't fix it
+  end
 
   def self.exponential_backoff(attempt)
     # Ensure minimum wait time respects API throttling (5 seconds minimum)
@@ -22,7 +31,7 @@ class BggDataImportJob < ApplicationJob
   end
   private_class_method :exponential_backoff
 
-  def perform(ids, batch_size, update_existing: false)
+  def perform(ids)
     base_games_buffer = []
     expansions_buffer = []
     image_jobs = []
@@ -37,10 +46,9 @@ class BggDataImportJob < ApplicationJob
           expansions_buffer.concat(batch_expansions)
           image_jobs.concat(batch_images)
 
-          # Flush buffer if reached batch_size
-          if (base_games_buffer.size + expansions_buffer.size) >= batch_size
-            flush_buffer(base_games_buffer, expansions_buffer, image_jobs,
-                         update_existing: update_existing)
+          # Flush buffer if reached FLUSH_THRESHOLD
+          if (base_games_buffer.size + expansions_buffer.size) >= FLUSH_THRESHOLD
+            flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
           end
         end
       end
@@ -52,8 +60,7 @@ class BggDataImportJob < ApplicationJob
     end
     return unless base_games_buffer.any? || expansions_buffer.any?
 
-    flush_buffer(base_games_buffer, expansions_buffer, image_jobs,
-                 update_existing: update_existing)
+    flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
   end
 
   private
@@ -63,8 +70,15 @@ class BggDataImportJob < ApplicationJob
     batch_expansions = []
     batch_images = []
     boardgames = xml.locate("items/item")
+
     boardgames.each do |boardgame|
-      game, image = boardgame_parser(boardgame)
+      begin
+        game, image = boardgame_parser(boardgame)
+      rescue StandardError => e
+        Rails.error.report(e, context: { bgg_item_id: boardgame.attributes[:id] })
+        next
+      end
+
       if boardgame.attributes[:type] == "boardgameexpansion"
         batch_expansions << game
       else
@@ -90,6 +104,8 @@ class BggDataImportJob < ApplicationJob
     min_age = boardgame.locate("minage/@value").first&.to_i
     alternative_names = boardgame.locate("name[@type=alternate]/@value")
     language_dependence = language_dependence_parser(boardgame)
+    description = boardgame.locate("*/description").first&.text
+    weight = boardgame.locate("*/averageweight/@value").first&.to_f
     now = Time.current
 
     [
@@ -107,6 +123,8 @@ class BggDataImportJob < ApplicationJob
         min_age: min_age,
         alternative_names: alternative_names,
         language_dependence: language_dependence,
+        description: description,
+        weight: weight,
         created_at: now,
         updated_at: now
       },
@@ -115,8 +133,6 @@ class BggDataImportJob < ApplicationJob
         image_url: image_url
       }
     ]
-  rescue StandardError => e
-    raise "Failed to parse boardgame ID #{bgg_id} (#{name}): #{e.message}"
   end
 
   def find_base_game_id(xml)
@@ -142,36 +158,41 @@ class BggDataImportJob < ApplicationJob
   end
 
   def parse(url)
-    response = Faraday.get(url)
+    response = Faraday.get(url, nil, { 'Authorization' => "Bearer #{ENV["BGG_TOKEN"]}" })
+
     unless response.success?
-      Rails.logger.warn("Request for #{url} failed with #{response.status} #{response.reason_phrase}")
-      raise Faraday::ServerError, "Request failed with #{response.status}"
+      message = "Request for #{url} failed with #{response.status} #{response.reason_phrase}"
+
+      if response.status.between?(400, 499) && response.status != 429
+        Rails.logger.error(message)
+        raise BggApiClientError, message
+      else
+        Rails.logger.warn(message)
+        raise BggApiServerError, message
+      end
     end
+
     Ox.parse(response.body)
   rescue Faraday::TimeoutError => e
     Rails.logger.warn("Timeout while fetching #{url}: #{e.message}")
-    raise StandardError, "Giving up on the server. Got error: #{e.message}"
+    raise
   rescue Faraday::ConnectionFailed => e
     Rails.logger.warn("Connection failed for #{url}: #{e.message}")
     raise
+  rescue Ox::Error => e
+    Rails.logger.error("Failed to parse XML from #{url}: #{e.message}")
+    raise BggApiClientError, "Malformed XML response: #{e.message}"
   end
 
-  def flush_buffer(base_games_buffer, expansions_buffer, image_jobs, update_existing: false)
+  def flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
     return if base_games_buffer.empty? && expansions_buffer.empty?
 
-    if update_existing
-      Game.upsert_all(base_games_buffer, unique_by: :bgg_id) if base_games_buffer.any?
-      if expansions_buffer.any?
-        convert_bgg_ids_to_db_ids(expansions_buffer)
-        Game.upsert_all(expansions_buffer, unique_by: :bgg_id)
-      end
-    else
-      Game.insert_all(base_games_buffer) if base_games_buffer.any?
-      if expansions_buffer.any?
-        convert_bgg_ids_to_db_ids(expansions_buffer)
-        Game.insert_all(expansions_buffer)
-      end
+    Game.upsert_all(base_games_buffer, unique_by: :bgg_id) if base_games_buffer.any?
+    if expansions_buffer.any?
+      convert_bgg_ids_to_db_ids(expansions_buffer)
+      Game.upsert_all(expansions_buffer, unique_by: :bgg_id)
     end
+
 
     base_games_buffer.clear
     expansions_buffer.clear
