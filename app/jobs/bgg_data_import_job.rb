@@ -38,7 +38,7 @@ class BggDataImportJob < ApplicationJob
 
     ids.each_slice(MAX_BGG_ID_SLICE) do |api_ids|
       start_time = Time.now
-      url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&id=#{api_ids.join(',')}"
+      url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&stats=1&id=#{api_ids.join(',')}"
       xml = parse(url)
       if xml
         parse_data(xml) do |batch_games, batch_expansions, batch_images|
