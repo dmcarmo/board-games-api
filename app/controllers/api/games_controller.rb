@@ -18,7 +18,7 @@ class Api::GamesController < Api::BaseController
           name: game.name,
           bgg_id: game.bgg_id,
           year_published: game.year_published,
-          image_url: game.image_url
+          image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id)
         }
       end
     end
