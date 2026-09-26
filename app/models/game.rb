@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require "mini_magick"
 
 class Game < ApplicationRecord
   include PgSearch::Model
@@ -56,5 +57,42 @@ class Game < ApplicationRecord
 
   def image_url
     Rails.application.routes.url_helpers.api_permanent_image_url(image.key) if image.attached?
+  end
+
+  def image_aspect_ratio
+    return nil unless image.attached?
+
+    width = image.blob.metadata[:width]
+    height = image.blob.metadata[:height]
+
+    if width.present? && height.present? && !height.zero?
+      return width.to_f / height
+    end
+
+    calculate_and_cache_old_aspect_ratio
+  end
+
+  private
+
+  def calculate_and_cache_old_aspect_ratio
+    image.blob.open do |file|
+      img = MiniMagick::Image.new(file.path)
+      return nil if img.height.zero?
+
+      calculated_ratio = img.width.to_f / img.height
+
+      image.blob.update!(
+        metadata: image.blob.metadata.merge(
+          width: img.width,
+          height: img.height,
+          analyzed: true
+        )
+      )
+
+      calculated_ratio
+    end
+  rescue => e
+    Rails.logger.error("ActiveStorage Fallback Failed: #{e.message}")
+    nil
   end
 end

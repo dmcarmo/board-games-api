@@ -18,7 +18,8 @@ class Api::GamesController < Api::BaseController
           name: game.name,
           bgg_id: game.bgg_id,
           year_published: game.year_published,
-          image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id)
+          image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id),
+          image_aspect_ratio: game.image_aspect_ratio
         }
       end
     end
@@ -52,7 +53,8 @@ class Api::GamesController < Api::BaseController
       weight: game.weight,
       average_rating: game.average_rating,
       bayesian_rating: game.bayesian_rating,
-      image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id)
+      image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id),
+      image_aspect_ratio: game.image_aspect_ratio
     }
   end
 
