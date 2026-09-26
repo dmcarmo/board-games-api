@@ -1,4 +1,5 @@
 require "open-uri"
+require "mini_magick"
 
 class ImageAttachJob < ApplicationJob
   queue_as :image_attach
@@ -35,10 +36,23 @@ class ImageAttachJob < ApplicationJob
       return # corrupt/unprocessable image — retrying won't fix it
     end
 
-    game.image.attach(io: resized, filename: filename, content_type: content_type,
-                      metadata: { source_filename: filename })
+    image_properties = MiniMagick::Image.new(resized.path)
+    resized_width  = image_properties.width
+    resized_height = image_properties.height
 
-    game.image.analyze_later
+    game.image.attach(
+      io: resized,
+      filename: filename,
+      content_type: content_type,
+      identify: false,
+      metadata: {
+        width: resized_width,
+        height: resized_height,
+        source_filename: filename,
+        analyzed: true
+      }
+    )
+
   rescue OpenURI::HTTPError => e
     status = e.io.status.first.to_i
     message = "Image download failed for #{image_url}: #{e.message}"

@@ -45,7 +45,8 @@ class Api::CollectionsController < Api::BaseController
             rank: collection_game.game.rank,
             average_rating: collection_game.game.average_rating,
             bayesian_rating: collection_game.game.bayesian_rating,
-            image_url: Rails.application.routes.url_helpers.api_permanent_image_url(collection_game.game.id)
+            image_url: Rails.application.routes.url_helpers.api_permanent_image_url(collection_game.game.id),
+            image_aspect_ratio: collection_game.game.image_aspect_ratio
           }
         end,
         pagination: pagy_metadata(pagy)
