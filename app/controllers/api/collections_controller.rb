@@ -1,6 +1,7 @@
 class Api::CollectionsController < Api::BaseController
   def show
     collection = Collection.find_by(bgg_username: params[:id])
+    # TODO: add a query param for excluding expansions
 
     if collection.nil?
       BggCreateCollectionJob.perform_later(params[:id])
@@ -10,6 +11,7 @@ class Api::CollectionsController < Api::BaseController
         id: collection.id,
         bgg_username: collection.bgg_username,
         status: collection.status,
+        updated_at: collection.updated_at,
         games: []
       }
     else
@@ -46,7 +48,16 @@ class Api::CollectionsController < Api::BaseController
             average_rating: collection_game.game.average_rating,
             bayesian_rating: collection_game.game.bayesian_rating,
             image_url: Rails.application.routes.url_helpers.api_permanent_image_url(collection_game.game.id),
-            image_aspect_ratio: collection_game.game.image_aspect_ratio
+            image_aspect_ratio: collection_game.game.image_aspect_ratio,
+            own: collection_game.own,
+            previously_owned: collection_game.previously_owned,
+            for_trade: collection_game.for_trade,
+            want: collection_game.want,
+            want_to_play: collection_game.want_to_play,
+            want_to_buy: collection_game.want_to_buy,
+            wishlist: collection_game.wishlist,
+            preordered: collection_game.preordered,
+            last_modified: collection_game.last_modified
           }
         end,
         pagination: pagy_metadata(pagy)
@@ -56,6 +67,7 @@ class Api::CollectionsController < Api::BaseController
 
   def create
     if params[:username]
+      Collection.find_or_create_by(bgg_username: params[:username]).update(status: :pending)
       BggCollectionImportJob.perform_later(params[:username])
       render json: { status: "Import in progress." }
     else

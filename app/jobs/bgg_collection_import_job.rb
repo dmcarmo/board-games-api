@@ -5,9 +5,14 @@ class BggCollectionImportJob < ApplicationJob
 
   MIN_DURATION = ENV.fetch("API_THROTTLE_SECONDS", 5).to_i.seconds
 
+  class BggApiClientError < StandardError; end # 4xx (excluding 429) — not retryable
+  class BggApiServerError < StandardError; end # 5xx and 429 — retryable
+  class BggApiPendingError < StandardError; end # 202 — collection still being prepared, retryable
+
   retry_on Faraday::TimeoutError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
   retry_on Faraday::ConnectionFailed, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
-  retry_on Faraday::ServerError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
+  retry_on BggApiServerError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
+  retry_on BggApiPendingError, wait: ->(attempt) { exponential_backoff(attempt) }, attempts: 5
 
   def self.exponential_backoff(attempt)
     # Ensure minimum wait time respects API throttling (5 seconds minimum)
@@ -17,17 +22,22 @@ class BggCollectionImportJob < ApplicationJob
   private_class_method :exponential_backoff
 
   def perform(bgg_username)
-    url = "#{Game::API_URL}collection?username=#{bgg_username}"
+    url = "#{Game::API_URL}collection?username=#{bgg_username}&subtype=boardgame&subtype=boardgameexpansion"
+    
+    collection = Collection.find_by(bgg_username: bgg_username)
+    collection.update(status: :syncing)
     xml = parse(url)
-    collection = Collection.find_or_create_by(bgg_username: bgg_username)
-    collection.status = :syncing
-    collection.save
+
     boardgames = xml.locate("items/item")
     games = boardgames.map { |boardgame| boardgame_parser(boardgame, collection) }.compact
-    CollectionGame.insert_all(games) if games.any?
-    collection.status = :sync_completed
-    collection.save
+
+    Collection.transaction do
+      collection.collection_games.delete_all
+      CollectionGame.insert_all(games) if games.any?
+      collection.update!(status: :sync_completed)
+    end
   rescue StandardError => e
+    collection&.update(status: :sync_failed)
     raise "Failed to create collection for #{bgg_username}: #{e.message}"
   end
 
@@ -36,16 +46,19 @@ class BggCollectionImportJob < ApplicationJob
   def boardgame_parser(boardgame, collection)
     bgg_id = boardgame.attributes[:objectid]&.to_i
     game_id = Game.find_by(bgg_id: bgg_id)&.id
-    own = boardgame.locate("status").first.attributes[:own] == "1"
-    previously_owned = boardgame.locate("status").first.attributes[:prevowned] == "1"
-    for_trade = boardgame.locate("status").first.attributes[:fortrade] == "1"
-    want = boardgame.locate("status").first.attributes[:want] == "1"
-    want_to_play = boardgame.locate("status").first.attributes[:wanttoplay] == "1"
-    want_to_buy = boardgame.locate("status").first.attributes[:wanttobuy] == "1"
-    wishlist = boardgame.locate("status").first.attributes[:wishlist].to_i
-    preordered = boardgame.locate("status").first.attributes[:preordered] == "1"
-    last_modified = ActiveSupport::TimeZone['UTC'].parse(boardgame.locate("status").first.attributes[:lastmodified] || "")
-    number_of_plays = boardgame.locate("numplays").first.text.to_i
+    return unless game_id
+
+    status = boardgame.locate("status").first&.attributes || {}
+    own = status[:own] == "1"
+    previously_owned = status[:prevowned] == "1"
+    for_trade = status[:fortrade] == "1"
+    want = status[:want] == "1"
+    want_to_play = status[:wanttoplay] == "1"
+    want_to_buy = status[:wanttobuy] == "1"
+    wishlist = status[:wishlist].to_i
+    preordered = status[:preordered] == "1"
+    last_modified = ActiveSupport::TimeZone['UTC'].parse(status[:lastmodified] || "")
+    number_of_plays = boardgame.locate("numplays").first.text.to_i || 0
     now = Time.current
 
     if game_id
@@ -67,38 +80,39 @@ class BggCollectionImportJob < ApplicationJob
       }
     end
   rescue StandardError => e
-    raise "Failed to parse boardgame ID #{bgg_id} (#{name}): #{e.message}"
+    raise "Failed to parse boardgame ID #{bgg_id}: #{e.message}"
   end
 
-  def parse(url, max_retries: 5, wait_seconds: 5)
-    retries = 0
+  def parse(url)
+    response = Faraday.get(url, nil, { 'Authorization' => "Bearer #{ENV["BGG_TOKEN"]}" })
 
-    begin
-      response = Faraday.get(url)
-      if response.status == 200
-        Ox.parse(response.body)
-      elsif response.status == 202
-        if retries < max_retries
-          retries += 1
-          Rails.logger.info("Data not ready (202) for #{url}. Retrying #{retries}/#{max_retries} in #{wait_seconds}s...")
-          sleep(wait_seconds)
-          raise RetryRequest
-        else
-          Rails.logger.warn("Max retries reached for #{url} (still 202)")
-          raise StandardError, "Data not ready after #{max_retries} attempts"
-        end
-      else
-        Rails.logger.warn("Request for #{url} failed with #{response.status} #{response.reason_phrase}")
-        raise StandardError, "Request failed with #{response.status}"
-      end
-    rescue RetryRequest
-      retry
-    rescue Faraday::TimeoutError => e
-      Rails.logger.warn("Timeout while fetching #{url}: #{e.message}")
-      raise StandardError, "Giving up on the server. Got error: #{e.message}"
-    rescue Faraday::ConnectionFailed => e
-      Rails.logger.warn("Connection failed for #{url}: #{e.message}")
-      raise
+    if response.status == 202
+      message = "Data not ready (202) for #{url}"
+      Rails.logger.info(message)
+      raise BggApiPendingError, message
     end
+
+    unless response.success?
+      message = "Request for #{url} failed with #{response.status} #{response.reason_phrase}"
+
+      if response.status.between?(400, 499) && response.status != 429
+        Rails.logger.error(message)
+        raise BggApiClientError, message
+      else
+        Rails.logger.warn(message)
+        raise BggApiServerError, message
+      end
+    end
+
+    Ox.parse(response.body)
+  rescue Faraday::TimeoutError => e
+    Rails.logger.warn("Timeout while fetching #{url}: #{e.message}")
+    raise
+  rescue Faraday::ConnectionFailed => e
+    Rails.logger.warn("Connection failed for #{url}: #{e.message}")
+    raise
+  rescue Ox::Error => e
+    Rails.logger.error("Failed to parse XML from #{url}: #{e.message}")
+    raise BggApiClientError, "Malformed XML response: #{e.message}"
   end
 end
