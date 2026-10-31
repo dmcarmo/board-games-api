@@ -22,14 +22,19 @@ class BggCollectionImportJob < ApplicationJob
   private_class_method :exponential_backoff
 
   def perform(bgg_username)
-    url = "#{Game::API_URL}collection?username=#{bgg_username}&subtype=boardgame&subtype=boardgameexpansion"
-    
+    boardgames_url = "#{Game::API_URL}collection?username=#{bgg_username}"
+    expansions_url = "#{Game::API_URL}collection?username=#{bgg_username}&subtype=boardgameexpansion"
+
     collection = Collection.find_by(bgg_username: bgg_username)
     collection.update(status: :syncing)
-    xml = parse(url)
 
-    boardgames = xml.locate("items/item")
-    games = boardgames.map { |boardgame| boardgame_parser(boardgame, collection) }.compact
+    boardgames_xml = parse(boardgames_url)
+    boardgames = boardgames_xml.locate("items/item")
+
+    expansions_xml = parse(expansions_url)
+    expansions = expansions_xml.locate("items/item")
+
+    games = boardgames.concat(expansions).map { |boardgame| boardgame_parser(boardgame, collection) }.compact
 
     Collection.transaction do
       collection.collection_games.delete_all
