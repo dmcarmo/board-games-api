@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_09_21_110053) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_04_114523) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_trgm"
   enable_extension "pgcrypto"
@@ -70,8 +70,10 @@ ActiveRecord::Schema[7.2].define(version: 2026_09_21_110053) do
     t.integer "number_of_plays"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "game_version_id"
     t.index ["collection_id"], name: "index_collection_games_on_collection_id"
     t.index ["game_id"], name: "index_collection_games_on_game_id"
+    t.index ["game_version_id"], name: "index_collection_games_on_game_version_id"
   end
 
   create_table "collections", force: :cascade do |t|
@@ -80,6 +82,19 @@ ActiveRecord::Schema[7.2].define(version: 2026_09_21_110053) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["bgg_username"], name: "index_collections_on_bgg_username"
+  end
+
+  create_table "game_versions", force: :cascade do |t|
+    t.bigint "game_id", null: false
+    t.integer "bgg_id"
+    t.string "edition"
+    t.string "year_published"
+    t.string "languages", default: [], array: true
+    t.string "publishers", default: [], array: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["bgg_id"], name: "index_game_versions_on_bgg_id", unique: true
+    t.index ["game_id"], name: "index_game_versions_on_game_id"
   end
 
   create_table "games", force: :cascade do |t|
@@ -207,6 +222,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_09_21_110053) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "collection_games", "collections"
+  add_foreign_key "collection_games", "game_versions"
   add_foreign_key "collection_games", "games"
+  add_foreign_key "game_versions", "games"
   add_foreign_key "games", "games", column: "base_game_id"
 end

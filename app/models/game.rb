@@ -25,6 +25,7 @@ class Game < ApplicationRecord
   }
 
   has_many :collection_games, dependent: :destroy
+  has_many :game_versions, dependent: :destroy
   belongs_to :base_game, class_name: "Game", optional: true
   has_many :expansions, class_name: "Game", foreign_key: "base_game_id", dependent: :destroy
   has_one_attached :image
