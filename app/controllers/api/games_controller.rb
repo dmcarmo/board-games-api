@@ -31,7 +31,17 @@ class Api::GamesController < Api::BaseController
   end
 
   def show
-    game = Game.find(params[:id])
+    game = Game.includes(:game_versions).find(params[:id])
+
+    versions = game.game_versions.map do |version|
+      {
+        bgg_id: version.bgg_id,
+        edition: version.edition,
+        year_published: version.year_published,
+        languages: version.languages,
+        publishers: version.publishers
+      }
+    end
 
     render json: {
       id: game.id,
@@ -54,7 +64,8 @@ class Api::GamesController < Api::BaseController
       average_rating: game.average_rating,
       bayesian_rating: game.bayesian_rating,
       image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id),
-      image_aspect_ratio: game.image_aspect_ratio
+      image_aspect_ratio: game.image_aspect_ratio,
+      versions: versions
     }
   end
 

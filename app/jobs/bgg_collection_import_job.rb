@@ -22,8 +22,8 @@ class BggCollectionImportJob < ApplicationJob
   private_class_method :exponential_backoff
 
   def perform(bgg_username)
-    boardgames_url = "#{Game::API_URL}collection?username=#{bgg_username}"
-    expansions_url = "#{Game::API_URL}collection?username=#{bgg_username}&subtype=boardgameexpansion"
+    boardgames_url = "#{Game::API_URL}collection?username=#{bgg_username}&version=1"
+    expansions_url = "#{Game::API_URL}collection?username=#{bgg_username}&subtype=boardgameexpansion&version=1"
 
     collection = Collection.find_by(bgg_username: bgg_username)
     collection.update(status: :syncing)
@@ -66,6 +66,9 @@ class BggCollectionImportJob < ApplicationJob
     number_of_plays = boardgame.locate("numplays").first.text.to_i || 0
     now = Time.current
 
+    version_bgg_id = boardgame.locate("version/item/@id").first
+    version_id = GameVersion.find_by(bgg_id: version_bgg_id)&.id
+
     if game_id
       {
         collection_id: collection.id,
@@ -80,6 +83,7 @@ class BggCollectionImportJob < ApplicationJob
         preordered: preordered,
         last_modified: last_modified,
         number_of_plays: number_of_plays,
+        game_version_id: version_id,
         created_at: now,
         updated_at: now
       }

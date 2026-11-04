@@ -35,20 +35,22 @@ class BggDataImportJob < ApplicationJob
     base_games_buffer = []
     expansions_buffer = []
     image_jobs = []
+    versions_buffer = []
 
     ids.each_slice(MAX_BGG_ID_SLICE) do |api_ids|
       start_time = Time.now
-      url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&stats=1&id=#{api_ids.join(',')}"
+      url = "#{Game::API_URL}thing?type=boardgame,boardgameexpansion&stats=1&versions=1&id=#{api_ids.join(',')}"
       xml = parse(url)
       if xml
-        parse_data(xml) do |batch_games, batch_expansions, batch_images|
+        parse_data(xml) do |batch_games, batch_expansions, batch_images, batch_versions|
           base_games_buffer.concat(batch_games)
           expansions_buffer.concat(batch_expansions)
           image_jobs.concat(batch_images)
+          versions_buffer.concat(batch_versions)
 
           # Flush buffer if reached FLUSH_THRESHOLD
           if (base_games_buffer.size + expansions_buffer.size) >= FLUSH_THRESHOLD
-            flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
+            flush_buffer(base_games_buffer, expansions_buffer, image_jobs, versions_buffer)
           end
         end
       end
@@ -60,7 +62,7 @@ class BggDataImportJob < ApplicationJob
     end
     return unless base_games_buffer.any? || expansions_buffer.any?
 
-    flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
+    flush_buffer(base_games_buffer, expansions_buffer, image_jobs, versions_buffer)
   end
 
   private
@@ -69,11 +71,12 @@ class BggDataImportJob < ApplicationJob
     batch_games = []
     batch_expansions = []
     batch_images = []
+    batch_versions = []
     boardgames = xml.locate("items/item")
 
     boardgames.each do |boardgame|
       begin
-        game, image = boardgame_parser(boardgame)
+        game, image, versions = boardgame_parser(boardgame)
       rescue StandardError => e
         Rails.error.report(e, context: { bgg_item_id: boardgame.attributes[:id] })
         next
@@ -85,8 +88,9 @@ class BggDataImportJob < ApplicationJob
         batch_games << game
       end
       batch_images << image
+      batch_versions.concat(versions)
     end
-    yield batch_games, batch_expansions, batch_images
+    yield batch_games, batch_expansions, batch_images, batch_versions
   end
 
   def boardgame_parser(boardgame)
@@ -107,6 +111,20 @@ class BggDataImportJob < ApplicationJob
     description = boardgame.locate("*/description").first&.text
     weight = boardgame.locate("*/averageweight/@value").first&.to_f
     now = Time.current
+
+    versions = boardgame.locate("versions/item")
+    versions_data = []
+
+    versions.each do |version|
+      versions_data << {
+        bgg_id: version.locate("@id").first&.to_i,
+        game_id: version.locate("link[@type=boardgameversion]/@id").first&.to_i,
+        edition: version.locate("name[@type=primary]/@value").first,
+        year_published: version.locate("yearpublished/@value").first,
+        languages: version.locate("link[@type=language]/@value"),
+        publishers: version.locate("link[@type=boardgamepublisher]/@value"),
+      }
+    end
 
     [
       {
@@ -131,7 +149,8 @@ class BggDataImportJob < ApplicationJob
       {
         bgg_id: bgg_id,
         image_url: image_url
-      }
+      },
+      versions_data
     ]
   end
 
@@ -184,7 +203,7 @@ class BggDataImportJob < ApplicationJob
     raise BggApiClientError, "Malformed XML response: #{e.message}"
   end
 
-  def flush_buffer(base_games_buffer, expansions_buffer, image_jobs)
+  def flush_buffer(base_games_buffer, expansions_buffer, image_jobs, versions_buffer)
     return if base_games_buffer.empty? && expansions_buffer.empty?
 
     Game.upsert_all(base_games_buffer, unique_by: :bgg_id) if base_games_buffer.any?
@@ -193,21 +212,35 @@ class BggDataImportJob < ApplicationJob
       Game.upsert_all(expansions_buffer, unique_by: :bgg_id)
     end
 
+    if versions_buffer.any?
+      convert_bgg_ids_to_db_ids(versions_buffer)
+      GameVersion.upsert_all(versions_buffer, unique_by: :bgg_id)
+    end
 
     base_games_buffer.clear
     expansions_buffer.clear
+    versions_buffer.clear
 
     image_jobs.each { |image| ImageAttachJob.perform_later(image[:bgg_id], image[:image_url]) }
     image_jobs.clear
   end
 
-  def convert_bgg_ids_to_db_ids(expansions_buffer)
-    # Convert BGG base_game_id to actual database ID (modifies buffer in place)
-    bgg_ids = expansions_buffer.map { |expansion| expansion[:base_game_id] }.compact.uniq
+  def convert_bgg_ids_to_db_ids(data_buffer)
+    # Convert BGG game_id to actual database ID (modifies buffer in place)
+    if data_buffer.first[:base_game_id]
+      bgg_ids = data_buffer.map { |data| data[:base_game_id] }.compact.uniq
+    else
+      bgg_ids = data_buffer.map { |data| data[:game_id] }.compact.uniq
+    end
+
     bgg_to_db_id_map = Game.where(bgg_id: bgg_ids).pluck(:bgg_id, :id).to_h
 
-    expansions_buffer.each do |expansion|
-      expansion[:base_game_id] = bgg_to_db_id_map[expansion[:base_game_id]]
+    data_buffer.each do |data|
+      if data[:base_game_id]
+        data[:base_game_id] = bgg_to_db_id_map[data[:base_game_id]]
+      else
+        data[:game_id] = bgg_to_db_id_map[data[:game_id]]
+      end
     end
   end
 end
