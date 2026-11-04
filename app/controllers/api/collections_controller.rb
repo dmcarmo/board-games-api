@@ -1,6 +1,6 @@
 class Api::CollectionsController < Api::BaseController
   def show
-    collection = Collection.find_by(bgg_username: params[:id])
+    collection = Collection.includes(collection_games: [:game, :game_version]).find_by(bgg_username: params[:id])
     # TODO: add a query param for excluding expansions
 
     if collection.nil?
@@ -20,7 +20,7 @@ class Api::CollectionsController < Api::BaseController
         items: 50
       )
       pagy_headers_merge(pagy)
-      puts
+
       render json: {
         id: collection.id,
         bgg_username: collection.bgg_username,
@@ -57,6 +57,7 @@ class Api::CollectionsController < Api::BaseController
             want_to_buy: collection_game.want_to_buy,
             wishlist: collection_game.wishlist,
             preordered: collection_game.preordered,
+            version: get_version(collection_game.game_version),
             last_modified: collection_game.last_modified
           }
         end,
@@ -72,6 +73,22 @@ class Api::CollectionsController < Api::BaseController
       render json: { status: "Import in progress." }
     else
       render json: { error: "Bad Request", message: "Missing required key: username" }, status: :bad_request
+    end
+  end
+
+  private
+
+  def get_version(game_version)
+    if game_version
+      {
+        bgg_id: game_version.bgg_id,
+        edition: game_version.edition,
+        year_published: game_version.year_published,
+        languages: game_version.languages,
+        publishers: game_version.publishers
+      }
+    else
+      {}
     end
   end
 end
