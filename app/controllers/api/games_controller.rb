@@ -11,25 +11,30 @@ class Api::GamesController < Api::BaseController
 
     pagy_headers_merge(pagy)
 
-    unless params[:extended] == "true"
-      games = games.map do |game|
-        {
-          id: game.id,
-          name: game.name,
-          bgg_id: game.bgg_id,
-          year_published: game.year_published,
-          image_url: Rails.application.routes.url_helpers.api_permanent_image_url(game.id),
-          image_aspect_ratio: game.image_aspect_ratio
-        }
+    url_helpers = Rails.application.routes.url_helpers
+
+    games =
+      if params[:extended] == "true"
+        games.map do |game|
+          game.as_json.merge(
+            image_url: (url_helpers.api_permanent_image_url(game.id) if game.image.attached?)
+          )
+        end
+      else
+        games.map do |game|
+          {
+            id: game.id,
+            name: game.name,
+            bgg_id: game.bgg_id,
+            year_published: game.year_published,
+            image_url: url_helpers.api_permanent_image_url(game.id),
+            image_aspect_ratio: game.image_aspect_ratio
+          }
+        end
       end
-    end
 
     render json: {
-      games: games.map { |game|
-        game.as_json.merge(
-          "image_url" => (Rails.application.routes.url_helpers.api_permanent_image_url(game.id) if game.image.attached?)
-        )
-      },
+      games: games,
       pagination: pagy_metadata(pagy)
     }
   end
