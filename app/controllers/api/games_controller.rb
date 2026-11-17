@@ -25,7 +25,11 @@ class Api::GamesController < Api::BaseController
     end
 
     render json: {
-      games: games.as_json(methods: [:image_url]),
+      games: games.map { |game|
+        game.as_json.merge(
+          "image_url" => (Rails.application.routes.url_helpers.api_permanent_image_url(game.id) if game.image.attached?)
+        )
+      },
       pagination: pagy_metadata(pagy)
     }
   end
