@@ -1,5 +1,7 @@
 module Api
-  class ApiKeysController < BaseController
+  class ApiKeysController < Api::BaseController
+    skip_before_action :authenticate_with_api_key, only: :create
+
     def index
       render json: current_bearer.api_keys
     end
