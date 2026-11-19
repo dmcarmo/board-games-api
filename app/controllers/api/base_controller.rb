@@ -8,7 +8,7 @@ module Api
 
     rescue_from Pundit::NotAuthorizedError, with: :not_authorized
 
-    before_action :authenticate_with_api_key, except: :create
+    before_action :authenticate_with_api_key
 
     attr_reader :current_bearer, :current_api_key
 
